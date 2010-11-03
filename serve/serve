@@ -1,0 +1,13 @@
+#!/bin/sh
+set -ex
+
+if [ "$(id -u)" = 0 ]; then
+    if type sudo; then
+        exec sudo -u passwords "$0" "$@"
+    else
+        exec setuidgid passwords "$0" "$@"
+    fi
+fi
+
+cd "$(dirname "$0")"
+exec ruby serve.rb
