@@ -147,17 +147,20 @@ end
 def list_recipients(file_name)
   raise "No such file: #{file_name}" unless File.file?(file_name)
   output = nil
-  status = Subprocess.popen(['gpg', '--list-only', '--verbose', file_name],
+  status = Subprocess.popen(['gpg', '--no-default-keyring', '--keyring',
+                             '/dev/null', '--secret-keyring', '/dev/null',
+                             '--list-only', '--verbose', file_name],
                             {:stderr=>Subprocess::PIPE}) do |_, _, _, err|
     output = err.read()
   end
 
   if status.exitstatus != 0
-    puts output
-    raise 'GPG list failed'
+    $stderr.puts output
+    $stderr.puts "GPG exited with status #{status.exitstatus}"
+    return nil
   end
 
-  return output.scan(/^gpg: public key is (.+)$/).flatten
+  return output.scan(/^gpg: public key is (.+)$/).flatten.sort
 end
 
 get '/:password_name/recipients/:alleged_requestor' do |password_name, alleged_requestor|
@@ -166,14 +169,17 @@ get '/:password_name/recipients/:alleged_requestor' do |password_name, alleged_r
   file_name = File.join(PasswordVault::VAULT, password_name)
   if PasswordVault.name_ok?(password_name) and File.file?(file_name)
     recipients = list_recipients(file_name)
-    content = recipients.join("\n") + "\n"
-    reporter.report_recipients(password_name, alleged_requestor, :success => true)
-  else
-    reporter.report_recipients(password_name, alleged_requestor, :success => false)
-    content = nil
+
+    if recipients
+      content = recipients.join("\n") + "\n"
+      reporter.report_recipients(password_name, alleged_requestor, :success => true)
+      return content
+    end
   end
 
-  content
+
+  reporter.report_recipients(password_name, alleged_requestor, :success => false)
+  return nil
 end
 
 get '/:password_name/:alleged_requestor' do |password_name, alleged_requestor|
