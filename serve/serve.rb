@@ -25,13 +25,32 @@ EOF
            )
   end
 
+  def report_recipients(password_name, alleged_requestor, opts={})
+    if opts[:success]
+      subject = "[Vault] #{alleged_requestor} #{password_name} - password recipients listed"
+      body = 'The recipients were successfully listed.'
+    else
+      subject = "[Vault] #{alleged_requestor} #{password_name} - password invalidly requested"
+      body = 'The password failed validation or GPG failed.'
+    end
+    report(subject, <<EOF
+At #{Time.now}, the password daemon received a request to list the
+encryption recipients of #{password_name}. The requestor claimed to be
+#{alleged_requestor}, although there's no guarantee of authenticity.
+
+#{body}
+EOF
+           )
+  end
+
+
   def report_fetch(password_name, alleged_requestor, opts={})
     if opts[:success]
       subject = "[Vault] #{alleged_requestor} #{password_name} - password fetched"
       body = 'The password was successfully distributed.'
     else
       subject = "[Vault] #{alleged_requestor} #{password_name} - password invalidly requested"
-      body = 'The password name failed validation'
+      body = 'The password name failed validation.'
     end
 
     # Note that alleged_requestor is trivially forgeable.  If we care, we could
@@ -49,10 +68,10 @@ EOF
   def report_rm(password_name, alleged_requestor, opts={})
     if opts[:success]
       subject = "[Vault] #{alleged_requestor} #{password_name} - password deleted"
-      body = 'The password was successfully deleted'
+      body = 'The password was successfully deleted.'
     else
       subject = "[Vault] #{alleged_requestor} #{password_name} - password deletion failed"
-      body = 'The password could not be deleted'
+      body = 'The password could not be deleted.'
     end
     report(subject, <<EOF
 At #{Time.now}, the password daemon received a request to delete #{password_name}.
@@ -121,6 +140,40 @@ get '/:alleged_requestor' do |alleged_requestor|
     raise unless f.starts_with?(prefix)
     f[prefix.length..-1]
   end.sort.join("\n")
+end
+
+# List the recipient keys on a given encrypted file.
+# (This will be the ID of encryption subkeys, not the primary keys.)
+def list_recipients(file_name)
+  raise "No such file: #{file_name}" unless File.file?(file_name)
+  output = nil
+  status = Subprocess.popen(['gpg', '--list-only', '--verbose', file_name],
+                            {:stderr=>Subprocess::PIPE}) do |_, _, _, err|
+    output = err.read()
+  end
+
+  if status.exitstatus != 0
+    puts output
+    raise 'GPG list failed'
+  end
+
+  return output.scan(/^gpg: public key is (.+)$/).flatten
+end
+
+get '/:password_name/recipients/:alleged_requestor' do |password_name, alleged_requestor|
+  password_name = PasswordVault.unescape(password_name)
+  alleged_requestor = PasswordVault.unescape(alleged_requestor)
+  file_name = File.join(PasswordVault::VAULT, password_name)
+  if PasswordVault.name_ok?(password_name) and File.file?(file_name)
+    recipients = list_recipients(file_name)
+    content = recipients.join("\n") + "\n"
+    reporter.report_recipients(password_name, alleged_requestor, :success => true)
+  else
+    reporter.report_recipients(password_name, alleged_requestor, :success => false)
+    content = nil
+  end
+
+  content
 end
 
 get '/:password_name/:alleged_requestor' do |password_name, alleged_requestor|
