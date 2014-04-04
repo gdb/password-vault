@@ -1,11 +1,25 @@
 require 'uri'
 
 class PasswordVault
-  TO_EMAIL = raise("Insert email address here")
-  FROM_EMAIL = "#{`hostname`.strip} vault <#{raise("Insert email address here")}>"
   BIND = 'localhost'
   PORT = 7331
   VAULT = '/pay/password-vault'
+
+  # configure this for the server daemon (not used by clients)
+  @@to_email = nil
+  def self.TO_EMAIL
+    return @@to_email? @@to_email : raise("Insert email address here")
+  end
+
+  # configure this for the server daemon (not used by clients)
+  @@from_email = "foo bar"
+  def self.FROM_EMAIL
+    if @@from_email then
+      return "#{`hostname`.strip} vault <#{@@from_email}>"
+    else
+      raise("Insert email address here")
+    end
+  end
 
   def self.name_ok?(password_name)
     # Exclude things with funky characters, such as emacs tilde files.  Also
