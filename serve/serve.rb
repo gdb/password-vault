@@ -137,7 +137,7 @@ get '/:alleged_requestor' do |alleged_requestor|
   reporter.report_list(alleged_requestor)
   prefix = File.join(PasswordVault::VAULT, '')
   recursive_list(PasswordVault::VAULT).flatten.map do |f|
-    raise unless f.starts_with?(prefix)
+    raise unless f.start_with?(prefix)
     f[prefix.length..-1]
   end.sort.join("\n")
 end
